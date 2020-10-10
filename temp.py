@@ -1,63 +1,104 @@
+import sys
 import cv2
+import wrap
 import numpy as np
-import glob
-from pathlib import Path
-# Step 2 : Here we fetch data or we can say snapshots of documents from local storage by giving path.
-# path=Path("/home/veronica/docreader")
-# # Step 3 : Now we start a loop to fetch snaps one by one
-# image=[]
-# count=0
-# for imagepath in path.glob(“*.jpeg”):
-# count=count+1
-image=cv2.imread("/home/veronica/docreader/paper.jpeg")
-#here path of the image is taken, we can take different image by giving another.
+import requests
+from auto import autoprocess
 
-#here image is get resized for easy processing and a feasible dimension is taken
-image = cv2.resize(image, (1500, 880))
-original = image.copy()
-#image converted into grayscale
-gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-#blurred the image for clear processing
-blurred_image = cv2.GaussianBlur(gray_image, (5, 5), 0)
-#here edge detection is done by “canny edge detection technique. By this image can be easily segmented.
-edged_image = cv2.Canny(blurred_image, 0, 50)
-original_edged = edged_image.copy()
-# file_name_path = ‘file path to save image’ + str(count) + ‘.png’
-# cv2.imwrite(file_name_path, original_edged)
-#findContours is used to find contours around the images.
-(contours, _) = cv2.findContours(edged_image, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
-contours = sorted(contours, key=cv2.contourArea, reverse=True)
-#a function named rectify is created to to reshape or rectify the image.
-def rectify(h):
-    h = h.reshape((4,2))
-    hnew = np.zeros((4,2),dtype = np.float32)
-    add = h.sum(1)
-    hnew[0] = h[np.argmin(add)]
-    hnew[2] = h[np.argmax(add)]
-    diff = np.diff(h,axis = 1)
-    hnew[1] = h[np.argmin(diff)]
-    hnew[3] = h[np.argmax(diff)]
-    return hnew
-#It is obvious that if any image is clicked at a random angle it will definately have background and some other pictures and
-#images also but we need to specify that detection should be done for the paper or document only. So the vertix size 4 is chosen
-#of contour points.
-for c in contours:
-    p = cv2.arcLength(c, True)
-    approx = cv2.approxPolyDP(c, 0.02 * p, True)
-    #gives vertices size 4 means if vertices are 4 of any contour take that
-    if len(approx) == 4:
-        target = approx
-        break
-# mapping target points to 800x800 quadrilateral
-approx = rectify(target)
-pts2 = np.float32([[0,0],[800,0],[800,800],[0,800]])
-M = cv2.getPerspectiveTransform(approx,pts2)
-final_image = cv2.warpPerspective(original,M,(800,800))
-cv2.drawContours(image, [target], -1, (0, 255, 0), 2)
-final_image = cv2.cvtColor(final_image, cv2.COLOR_BGR2GRAY)
-cv2.imshow("test", final_image)
-# file_name_path = ‘file path to save image’ + str(count) + ‘.png’
-# cv2.imwrite(file_name_path, final_image)
+pnts = []
+count = 0
 
-cv2.waitKey(0)
-cv2.destroyAllWindows()
+
+def click_event(event, x, y, flags, param):
+    pnt = []
+    global count
+    if event == cv2.EVENT_LBUTTONDOWN:
+        # print(x,', ' s,y)
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        strXY = str(x) + ', ' + str(y)
+        image = cv2.circle(img, (x, y), 5, (0, 0, 255), 5)
+        # cv2.putText(img, strXY, (x, y), font, .5, (255, 255, 0), 2)
+        cv2.imshow('image', img)
+
+        count += 1
+        save(x, y, count)
+
+        print(count)
+
+    if event == cv2.EVENT_RBUTTONDOWN:
+        blue = img[y, x, 0]
+        green = img[y, x, 1]
+        red = img[y, x, 2]
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        strBGR = str(blue) + ', ' + str(green) + ', ' + str(red)
+        cv2.putText(img, strBGR, (x, y), font, .5, (0, 255, 255), 2)
+        cv2.imshow('image', img)
+
+
+def save(x, y, count):
+    global pnts
+    if count > 3:
+        cv2.setMouseCallback('image', click_event, param=None)
+
+    pnts.append([x, y])
+    print(pnts)
+
+
+def captureImage():
+    cap = cv2.VideoCapture(0)
+
+    if cap.isOpened() == False:
+        print("Error opening video stream or file")
+
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if ret == True:
+
+            cv2.imshow('Frame', frame)
+            if cv2.waitKey(25) & 0xFF == ord('q'):
+                proc_frame = frame.copy()
+                # cv2.imwrite("proc.jpg", proc_frame)
+                break
+
+        else:
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
+
+    return proc_frame
+
+
+if __name__ == "__main__":
+    choice = int(input("Auto [1] \nManual [2] \nQuit [3] "))
+    if choice == 1:
+        c = int(input("Default Camera [1] \nIP Camera [2] "))
+        if c == 1:
+            val = 0
+            autoprocess(val, c)
+        elif c == 2:
+            val = str(input("Enter your IP Camera URL: "))
+            autoprocess(val, c)
+
+        # auto(proc_image)
+
+    elif choice == 2:
+        proc_image = captureImage()
+        img = proc_image.copy()
+        # img = np.zeros((512, 512, 3), np.uint8)
+        cv2.imshow('image', img)
+        # four_point_transform(img, [[232,89],[546,85],[174,372],[600,372]])
+        cv2.setMouseCallback('image', click_event)
+        # print(pnts)
+        # image = cv2.imread("")
+        # wrap.Wrap(proc_image)
+        if cv2.waitKey(0) & 0xFF == ord('q'):
+            cv2.destroyAllWindows()
+        wrap.Wrap(proc_image, pnts)
+        # wrap.Wrap(proc_image)
+
+    elif choice == 3:
+        sys.exit("Thank You!")
+    else:
+        print("Invalid User choice")
+
